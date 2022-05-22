@@ -23,23 +23,6 @@ This repository runs an exported impulse on the Raspberry Pi Pico / RP2040. See 
 
 ## Building the application
 
-### Get the Edge Impulse SDK
-
-Unzip the deployed `C++ library` from your Edge Impulse project and copy only the folders to the root directory of this repository:
-
-   ```
-   example-standalone-inferencing-pico/
-   ├─ edge-impulse-sdk
-   ├─ model-parameters
-   ├─ source
-   ├─ tflite-model
-   ├─ .gitignore
-   ├─ CMakeLists.txt
-   ├─ LICENSE
-   ├─ README.md
-   └─ pico_sdk_import.cmake
-   ```
-
 ### Compile
 
 1. Create the `build` folder:
