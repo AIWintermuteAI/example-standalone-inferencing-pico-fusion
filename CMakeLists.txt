@@ -17,7 +17,10 @@ add_executable(pico_standalone
 
 include(${MODEL_FOLDER}/edge-impulse-sdk/cmake/utils.cmake)
 
-target_link_libraries(pico_standalone pico_stdlib)
+target_link_libraries(pico_standalone
+                      pico_stdlib
+                      hardware_gpio
+                      hardware_adc)
 
 # enable usb output, disable uart output
 pico_enable_stdio_usb(pico_standalone 1)
@@ -44,6 +47,7 @@ target_include_directories(pico_standalone PRIVATE
   ${EI_SDK_FOLDER}/CMSIS/DSP/PrivateInclude
   ${EI_SDK_FOLDER}/CMSIS/DSP/Include
   ${EI_SDK_FOLDER}/CMSIS/Core/Include
+  ThirdParty/rp2040_DHT11_lib 
   )
 
 include_directories(${INCLUDES})
@@ -54,10 +58,13 @@ RECURSIVE_FIND_FILE(SOURCE_FILES "${EI_SDK_FOLDER}" "*.cpp")
 RECURSIVE_FIND_FILE(CC_FILES "${EI_SDK_FOLDER}" "*.cc")
 RECURSIVE_FIND_FILE(S_FILES "${EI_SDK_FOLDER}" "*.s")
 RECURSIVE_FIND_FILE(C_FILES "${EI_SDK_FOLDER}" "*.c")
+RECURSIVE_FIND_FILE(THIRDPARTY_FILES "ThirdParty" "*.cpp")
+
 list(APPEND SOURCE_FILES ${S_FILES})
 list(APPEND SOURCE_FILES ${C_FILES})
 list(APPEND SOURCE_FILES ${CC_FILES})
 list(APPEND SOURCE_FILES ${MODEL_FILES})
+list(APPEND SOURCE_FILES ${THIRDPARTY_FILES})
 
 # add all sources to the project
 target_sources(pico_standalone PRIVATE ${SOURCE_FILES})

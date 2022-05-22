@@ -1,20 +1,45 @@
 #include "ei_run_classifier.h"
 
+#include "hardware/adc.h"
 #include <hardware/gpio.h>
 #include <hardware/uart.h>
 #include <pico/stdio_usb.h>
 #include <stdio.h>
 
+#include "dht11.h"
+
 const uint LED_PIN = 25;
+DHT11 dht(18);
 
-static const float features[] = {
-    // copy raw features here (for example from the 'Live classification' page)
+// Allocate a buffer here for the values
+float features[EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE] = { };
 
-};
+bool init_sensors() {
+    adc_init();
+    adc_gpio_init(26);
+    adc_select_input(0);
 
-int raw_feature_get_data(size_t offset, size_t length, float *out_ptr)
+    if (!dht.begin()) {
+        return false;
+    }
+    return true;
+
+}
+
+int raw_feature_get_data()
 {
-  memcpy(out_ptr, features + offset, length * sizeof(float));
+    for (size_t ix = 0; ix < EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE; ix += 3) {
+        // Determine the next tick (and then sleep later)
+        uint64_t next_tick = ei_read_timer_us() + (EI_CLASSIFIER_INTERVAL_MS * 1000);
+
+        dht.read();        
+        features[ix + 0] = dht.readTemperature();
+        features[ix + 1] = dht.readHumidity();
+        features[ix + 2] = adc_read();
+
+        sleep_us(next_tick - ei_read_timer_us());
+    }
+
   return 0;
 }
 
@@ -25,36 +50,46 @@ int main()
   gpio_init(LED_PIN);
   gpio_set_dir(LED_PIN, GPIO_OUT);
 
+    if (!init_sensors()) {
+        while(1) {
+        ei_printf("Sensor init error!\n");
+        ei_sleep(1000);
+        }
+    }
+
   ei_impulse_result_t result = {nullptr};
 
   while (true)
   {
     ei_printf("Edge Impulse standalone inferencing (Raspberry Pi Pico)\n");
 
-    if (sizeof(features) / sizeof(float) != EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE)
-    {
-      ei_printf("The size of your 'features' array is not correct. Expected %d items, but had %u\n",
-                EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE, sizeof(features) / sizeof(float));
-      return 1;
-    }
-
     while (1)
     {
       // blink LED
       gpio_put(LED_PIN, !gpio_get(LED_PIN));
+      raw_feature_get_data();
 
-      // the features are stored into flash, and we don't want to load everything into RAM
-      signal_t features_signal;
-      features_signal.total_length = sizeof(features) / sizeof(features[0]);
-      features_signal.get_data = &raw_feature_get_data;
+      // Turn the raw buffer in a signal which we can the classify
+      signal_t signal;
+      int err = numpy::signal_from_buffer(features, EI_CLASSIFIER_DSP_INPUT_FRAME_SIZE, &signal);
+      if (err != 0) {
+          ei_printf("Failed to create signal from buffer (%d)\n", err);
+          return true;
+      }
 
-      // invoke the impulse
-      EI_IMPULSE_ERROR res = run_classifier(&features_signal, &result, false);
+      // Run the classifier
+      ei_impulse_result_t result = { 0 };
 
-      ei_printf("run_classifier returned: %d\n", res);
+      err = run_classifier(&signal, &result, false);
+      if (err != EI_IMPULSE_OK) {
+          ei_printf("ERR: Failed to run classifier (%d)\n", err);
+          return true;
+      }
 
-      if (res != 0)
-        return 1;
+      ei_printf("run_classifier returned: %d\n", err);
+
+      if (err != 0)
+        return true;
 
       ei_printf("Predictions (DSP: %d ms., Classification: %d ms., Anomaly: %d ms.): \n",
                 result.timing.dsp, result.timing.classification, result.timing.anomaly);
